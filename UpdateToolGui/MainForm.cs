@@ -398,7 +398,6 @@ namespace UpdateToolGui
                         remaining_files--;
                     }
 
-                    // Remove this file from remaining list
 #if DEBUG
                     Log("Now finished: {0}", relative_filepath);
 #endif
