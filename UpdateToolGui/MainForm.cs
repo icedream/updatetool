@@ -3,19 +3,17 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
-using System.Security;
 using System.Security.Cryptography;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Windows.Threading;
+using UpdateToolGui.Extensions;
+using UpdateToolGui.Properties;
 
 namespace UpdateToolGui
 {
-    using Extensions;
-
     public partial class MainForm : Form
     {
         public MainForm()
@@ -23,72 +21,81 @@ namespace UpdateToolGui
             InitializeComponent();
         }
 
-        CancellationTokenSource cts = new CancellationTokenSource();
+        private CancellationTokenSource _cts = new CancellationTokenSource();
 
         public void ThreadSafe(Action action)
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return;
-            this.Invoke(action);
+            Invoke(action);
         }
 
         public T ThreadSafe<T>(Func<T> action)
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return default(T);
-            return (T)this.Invoke(action);
+            return (T) Invoke(action);
         }
 
         protected void Progress(int value)
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return;
             ThreadSafe(() => { prg_bar.Value = value; });
         }
 
         protected void Progress(int value, int max)
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return;
-            ThreadSafe(() => { prg_bar.Maximum = max; prg_bar.Value = value; });
+            ThreadSafe(() =>
+            {
+                prg_bar.Maximum = max;
+                prg_bar.Value = value;
+            });
         }
 
         protected void Progress(int value, int min, int max)
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return;
-            ThreadSafe(() => { prg_bar.Minimum = min; prg_bar.Maximum = max; prg_bar.Value = value; });
+            ThreadSafe(() =>
+            {
+                prg_bar.Minimum = min;
+                prg_bar.Maximum = max;
+                prg_bar.Value = value;
+            });
         }
 
         protected void Progress(string text = "")
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return;
             ThreadSafe(() => { txt_status.Text = text; });
         }
 
         protected void Progress(string text, params object[] args)
         {
-            if (this.Disposing || this.IsDisposed)
+            if (Disposing || IsDisposed)
                 return;
             ThreadSafe(() => { txt_status.Text = string.Format(text, args); });
         }
-        
+
 #if DEBUG
         protected void Log(string text, params object[] args)
         {
-            Console.WriteLine("[{0}] {1}", DateTime.Now.ToLongTimeString(), string.Format(text, args));
+            Console.WriteLine(@"[{0}] {1}", DateTime.Now.ToLongTimeString(), string.Format(text, args));
         }
 #endif
 
         private void checkBox1_CheckedChanged(object sender, EventArgs e)
         {
             // Enable if checkbox is checked
-            this.txt_updatefolder.Enabled
-                = this.button3.Enabled
-                = this.chk_checkdeleted.Enabled
-                = this.chk_createchanged.Enabled
-                = ((CheckBox)sender).Checked;
+            txt_updatefolder.Enabled
+                = button3.Enabled
+                    = chk_checkdeleted.Enabled
+                        = chk_createchanged.Enabled
+                            = ((CheckBox) sender).Checked;
         }
 
         private void button1_Click(object sender, EventArgs e)
@@ -98,7 +105,7 @@ namespace UpdateToolGui
                 folderBrowserDialog1.SelectedPath = txt_sourcefolder.Text;
 
             // Prompt and apply to textbox if ok
-            if (folderBrowserDialog1.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            if (folderBrowserDialog1.ShowDialog() == DialogResult.OK)
                 txt_sourcefolder.Text = folderBrowserDialog1.SelectedPath;
         }
 
@@ -109,7 +116,7 @@ namespace UpdateToolGui
                 openFileDialog1.FileName = txt_olddbpath.Text;
 
             // Prompt and apply to textbox if ok
-            if (openFileDialog1.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            if (openFileDialog1.ShowDialog() == DialogResult.OK)
                 txt_olddbpath.Text = openFileDialog1.FileName;
         }
 
@@ -120,7 +127,7 @@ namespace UpdateToolGui
                 folderBrowserDialog3.SelectedPath = txt_updatefolder.Text;
 
             // Prompt and apply to textbox if ok
-            if (folderBrowserDialog3.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            if (folderBrowserDialog3.ShowDialog() == DialogResult.OK)
                 txt_updatefolder.Text = folderBrowserDialog3.SelectedPath;
         }
 
@@ -147,7 +154,8 @@ namespace UpdateToolGui
                     throw new Exception("You need to choose different files for old and new database.");
                 if (checkBox1.Checked)
                     if (string.IsNullOrEmpty(txt_updatefolder.Text))
-                        throw new Exception("You need to enter a valid target folder path where to save the updated files.");
+                        throw new Exception(
+                            "You need to enter a valid target folder path where to save the updated files.");
 
                 // Start the job
 #if DEBUG
@@ -161,7 +169,8 @@ namespace UpdateToolGui
 #if DEBUG
                 Log(string.Format("Error: {0}", err.Message));
 #endif
-                MessageBox.Show(err.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Stop);
+                MessageBox.Show(err.Message, Resources.MainForm_button4_Click_Error, MessageBoxButtons.OK,
+                    MessageBoxIcon.Stop);
                 panel1.Enabled = true;
             }
         }
@@ -173,19 +182,20 @@ namespace UpdateToolGui
                 saveFileDialog1.FileName = txt_newdbpath.Text;
 
             // Prompt and apply to textbox if ok
-            if (saveFileDialog1.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            if (saveFileDialog1.ShowDialog() == DialogResult.OK)
                 txt_newdbpath.Text = saveFileDialog1.FileName;
         }
 
-        private string GetSize(double bytes, int decimals = 2)
+        private static string _getSize(double bytes, int decimals = 2)
         {
-            int i = 0;
+            var i = 0;
             while (bytes >= 1024)
             {
                 bytes /= 1024;
                 i++;
             }
-            return string.Format("{0} {1}", Math.Round(bytes, decimals), new[] { "B", "KiB", "MiB", "GiB", "TiB" }[Math.Min(4, i)]);
+            return string.Format("{0} {1}", Math.Round(bytes, decimals),
+                new[] {"B", "KiB", "MiB", "GiB", "TiB"}[Math.Min(4, i)]);
         }
 
         private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
@@ -193,40 +203,40 @@ namespace UpdateToolGui
 #if DEBUG
             Log("Job now running asynchronous.");
 #endif
-            cts = new CancellationTokenSource();
+            _cts = new CancellationTokenSource();
 
             var db = new Database(); // the database
-            var old_db = new Database(); // the database read from file
+            var oldDb = new Database(); // the database read from file
             var files = new List<FileInfo>(); // files that will be copied
 
             // user input
-            string in_src = Path.GetFullPath(ThreadSafe(() => this.txt_sourcefolder.Text));
-            string in_old_db = ThreadSafe(() => this.txt_olddbpath.Text);
-            if (!string.IsNullOrEmpty(in_old_db))
-                in_old_db = Path.GetFullPath(in_old_db);
-            string in_db = Path.GetFullPath(ThreadSafe(() => this.txt_newdbpath.Text));
-            bool in_copy = ThreadSafe(() => this.checkBox1.Checked);
-            string in_copytarget = ThreadSafe(() => this.txt_updatefolder.Text);
-            bool in_checkdeleted = ThreadSafe(() => this.chk_checkdeleted.Checked);
-            bool in_createchanged = ThreadSafe(() => this.chk_createchanged.Checked);
-            if (in_copy)
-                in_copytarget = Path.GetFullPath(in_copytarget);
-            bool in_compress = ThreadSafe(() => this.chk_compress.Checked);
+            var inSrc = Path.GetFullPath(ThreadSafe(() => txt_sourcefolder.Text));
+            var inOldDb = ThreadSafe(() => txt_olddbpath.Text);
+            if (!string.IsNullOrEmpty(inOldDb))
+                inOldDb = Path.GetFullPath(inOldDb);
+            var inDb = Path.GetFullPath(ThreadSafe(() => txt_newdbpath.Text));
+            var inCopy = ThreadSafe(() => checkBox1.Checked);
+            var inCopytarget = ThreadSafe(() => txt_updatefolder.Text);
+            var inCheckdeleted = ThreadSafe(() => chk_checkdeleted.Checked);
+            var inCreatechanged = ThreadSafe(() => chk_createchanged.Checked);
+            if (inCopy)
+                inCopytarget = Path.GetFullPath(inCopytarget);
+            var inCompress = ThreadSafe(() => chk_compress.Checked);
 
             // read old database if existing
-            if (!string.IsNullOrEmpty(in_old_db) && File.Exists(in_old_db))
+            if (!string.IsNullOrEmpty(inOldDb) && File.Exists(inOldDb))
             {
                 Progress("Reading old database...");
 #if DEBUG
                 Log("Reading old database data...");
 #endif
 
-                using (var dbRStream = File.OpenText(in_old_db))
+                using (var dbRStream = File.OpenText(inOldDb))
                 {
                     Stream dbStream;
 
                     // Get header (if existent)
-                    char[] buffer = new char[8];
+                    var buffer = new char[8];
                     if (dbRStream.BaseStream.Length >= 8)
                     {
                         dbRStream.Read(buffer, 0, 8);
@@ -235,10 +245,11 @@ namespace UpdateToolGui
                     if (new string(buffer) == "DEFLATEC") // deflate compression
                     {
 #if DEBUG
-                        Log("Database seems to be deflate-compressed (assumed by header), trying deflate decompression...");
+                        Log(
+                            "Database seems to be deflate-compressed (assumed by header), trying deflate decompression...");
 #endif
                         dbRStream.BaseStream.Seek(dbRStream.CurrentEncoding.GetByteCount("DEFLATEC"), SeekOrigin.Begin);
-                        dbStream = new System.IO.Compression.DeflateStream(dbRStream.BaseStream, System.IO.Compression.CompressionMode.Decompress);
+                        dbStream = new DeflateStream(dbRStream.BaseStream, CompressionMode.Decompress);
                     }
                     else // no compression at all
                     {
@@ -250,7 +261,7 @@ namespace UpdateToolGui
                     }
 
                     // Deserialize
-                    old_db = Database.Deserialize(dbStream);
+                    oldDb = Database.Deserialize(dbStream);
                 }
 
 #if DEBUG
@@ -263,12 +274,13 @@ namespace UpdateToolGui
 #if DEBUG
             Log("Searching files (this might take a bit)...");
 #endif
-            var in_src_di = new DirectoryInfo(in_src);
-            var in_src_files = in_src_di.EnumerateFiles("*", SearchOption.AllDirectories).OrderByDescending(f => f.Length);
-            var in_src_files_count = in_src_files.Count();
-            var in_src_files_size = in_src_files.Sum(f => f.Length);
+            var inSrcDi = new DirectoryInfo(inSrc);
+            var inSrcFiles =
+                inSrcDi.EnumerateFiles("*", SearchOption.AllDirectories).OrderByDescending(f => f.Length);
+            var inSrcFilesCount = inSrcFiles.Count();
+            var inSrcFilesSize = inSrcFiles.Sum(f => f.Length);
 #if DEBUG
-            Log("Found {0} files with a size of {1}.", in_src_files_count, GetSize(in_src_files_size));
+            Log("Found {0} files with a size of {1}.", inSrcFilesCount, _getSize(inSrcFilesSize));
 #endif
 
             // File analysis
@@ -276,22 +288,23 @@ namespace UpdateToolGui
 #if DEBUG
             Log("Now starting file analysis...");
 #endif
-            Stopwatch sw = new Stopwatch(); // for ETA calculation
+            var sw = new Stopwatch(); // for ETA calculation
             sw.Start();
-            long remaining_size = in_src_files_size;
-            object remaining_size_lock = new object();
-            var remaining_files = in_src_files_count;
-            object remaining_files_lock = new object();
-            long sprogmax = in_src_files_size;
-            int power = 0;
+            var remainingSize = inSrcFilesSize;
+            var remainingSizeLock = new object();
+            var remainingFiles = inSrcFilesCount;
+            var remainingFilesLock = new object();
+            var sprogmax = inSrcFilesSize;
+            var power = 0;
             while (sprogmax > int.MaxValue)
             {
                 sprogmax /= 10;
                 power++;
             }
-            Progress(0, (int)sprogmax);
+            Progress(0, (int) sprogmax);
 
-            var taskschedulers = new[] {
+            var taskschedulers = new[]
+            {
                 new LimitedConcurrencyLevelTaskScheduler(1), // Level 0 for largest files
                 new LimitedConcurrencyLevelTaskScheduler(1), // Level 1
                 new LimitedConcurrencyLevelTaskScheduler(2), // Level 2
@@ -299,85 +312,75 @@ namespace UpdateToolGui
                 new LimitedConcurrencyLevelTaskScheduler(16), // Level 4
                 new LimitedConcurrencyLevelTaskScheduler(64) // Level 5 for smallest files
             };
-            var taskfactories = new List<TaskFactory>();
-            foreach(var ts in taskschedulers)
-                taskfactories.Add(
-                    new TaskFactory(
-                        cts.Token,
-                        TaskCreationOptions.None,
-                        TaskContinuationOptions.None,
-                        ts
-                    )
-                );
+            var taskfactories =
+                taskschedulers.Select(
+                    ts => new TaskFactory(_cts.Token, TaskCreationOptions.None, TaskContinuationOptions.None, ts))
+                    .ToList();
             var tasks = new List<Task>();
 
             // queue tasks for all files
-            foreach (FileInfo fileinfo in in_src_files)
-            {
-                int tasklevel =
-                    0 // Level 0 for largest files (>= 512 MB)
-                    + (fileinfo.Length < 512 * 1024 * 1024 ? 1 : 0) // Level 1 (< 512 MB)
-                    + (fileinfo.Length < 128 * 1024 * 1024 ? 1 : 0) // Level 2 (< 128 MB)
-                    + (fileinfo.Length < 10 * 1024 * 1024 ? 1 : 0) // Level 3 (< 10 MB)
-                    + (fileinfo.Length < 1 * 1024 * 1024 ? 1 : 0) // Level 4 (< 1 MB)
-                    + (fileinfo.Length < 100 * 1024 ? 1 : 0) // Level 5 (< 100 kB)
-                    ;
-
-                TaskFactory taskfactory = taskfactories[tasklevel];
-
-                var task = taskfactory.StartNew(new Action<object>((fio) =>
+            foreach (var task in from fileinfo in inSrcFiles
+                let tasklevel = 0 // Level 0 for largest files (>= 512 MB)
+                                + (fileinfo.Length < 512*1024*1024 ? 1 : 0) // Level 1 (< 512 MB)
+                                + (fileinfo.Length < 128*1024*1024 ? 1 : 0) // Level 2 (< 128 MB)
+                                + (fileinfo.Length < 10*1024*1024 ? 1 : 0) // Level 3 (< 10 MB)
+                                + (fileinfo.Length < 1*1024*1024 ? 1 : 0) // Level 4 (< 1 MB)
+                                + (fileinfo.Length < 100*1024 ? 1 : 0)
+                let taskfactory = taskfactories[tasklevel]
+                select taskfactory.StartNew((fio =>
                 {
-                    var fi = (FileInfo)fio;
-                    DatabaseFileInfo db_fi = new DatabaseFileInfo();
-                    db_fi.Name = fi.Name;
-                    db_fi.Folder = fi.Directory.GetRelativePathFrom(in_src);
-                    var relative_filepath = fi.GetRelativePathFrom(in_src);
+                    var fi = (FileInfo) fio;
+                    var dbFi = new DatabaseFileInfo {Name = fi.Name, Folder = fi.Directory.GetRelativePathFrom(inSrc)};
+                    var relativeFilepath = fi.GetRelativePathFrom(inSrc);
 #if DEBUG
-                    Log("Now running: {0} ({1})", relative_filepath, GetSize(fi.Length));
+                    Log("Now running: {0} ({1})", relativeFilepath, _getSize(fi.Length));
 #endif
 
                     // Check for old database entries
-                    DatabaseFileInfo db_old_fi = null;
-                    if (old_db.Files.Any(
-                        d => d.Name == db_fi.Name && d.Folder == db_fi.Folder
-                            ))
+                    DatabaseFileInfo dbOldFi = null;
+                    if (oldDb.Files.Any(
+                        d => d.Name == dbFi.Name && d.Folder == dbFi.Folder
+                        ))
                     {
-                        db_old_fi = old_db.Files.Single(d => d.Name == db_fi.Name && d.Folder == db_fi.Folder);
+                        dbOldFi = oldDb.Files.Single(d => d.Name == dbFi.Name && d.Folder == dbFi.Folder);
                     }
 
                     // File properties
-                    db_fi.ModificationTime = fi.LastWriteTimeUtc;
-                    db_fi.Size = fi.Length;
+                    dbFi.ModificationTime = fi.LastWriteTimeUtc;
+                    dbFi.Size = fi.Length;
 
                     // Hash generation
-                    var hashgen = MD5CryptoServiceProvider.Create();
+                    MD5 hashgen = MD5.Create();
                     hashgen.Initialize();
-                    using (var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 4096 * 128))
+                    using (
+                        var fs = new FileStream(fi.FullName, FileMode.Open, FileAccess.Read, FileShare.Read, 4096*128))
                     {
-                        byte[] buffer = new byte[4096];
+                        var buffer = new byte[4096];
                         while (fs.Position < fs.Length)
                         {
-                            cts.Token.ThrowIfCancellationRequested();
+                            _cts.Token.ThrowIfCancellationRequested();
                             int recv = fs.Read(buffer, 0, buffer.Length);
                             hashgen.TransformBlock(buffer, 0, recv, null, 0);
                             //lock (remaining_size_lock)
-                            remaining_size -= recv;
+                            remainingSize -= recv;
                         }
                     }
                     hashgen.TransformFinalBlock(new byte[0], 0, 0);
-                    db_fi.Hash = hashgen.Hash;
+                    dbFi.Hash = hashgen.Hash;
 
                     // Check if updated
-                    if (in_copy)
+                    if (inCopy)
                     {
-                        bool isUpdated = db_old_fi == null;
-                        if (!isUpdated && in_copy)
-                            if (db_fi.Size != db_old_fi.Size || db_fi.ModificationTime != db_old_fi.ModificationTime)
-                                isUpdated = true;
-                        if (isUpdated)
+                        var isUpdated = dbOldFi == null;
+                        if (!isUpdated)
+                        {
+                            if (dbFi.Size != dbOldFi.Size || dbFi.ModificationTime != dbOldFi.ModificationTime)
+                                isUpdated = true; // TODO: Why is this not used???
+                        }
+                        else
                         {
 #if DEBUG
-                            Log("Adding to copy queue: {0}", relative_filepath);
+                            Log("Adding to copy queue: {0}", relativeFilepath);
 #endif
                             lock (files)
                             {
@@ -389,39 +392,38 @@ namespace UpdateToolGui
                     // Add to database
                     lock (db)
                     {
-                        db.Files.Add(db_fi);
+                        db.Files.Add(dbFi);
                     }
 
                     // Subtract from remaining files count
-                    lock (remaining_files_lock)
+                    lock (remainingFilesLock)
                     {
-                        remaining_files--;
+                        remainingFiles--;
                     }
 
 #if DEBUG
-                    Log("Now finished: {0}", relative_filepath);
+                    Log("Now finished: {0}", relativeFilepath);
 #endif
-                }), fileinfo);
-                task.ContinueWith((tasky) =>
+                }), fileinfo))
+            {
+                task.ContinueWith(tasky =>
                 {
-                    if (tasky.Exception != null)
-                    {
-                        cts.Cancel();
+                    if (tasky.Exception == null) return;
+                    _cts.Cancel();
 
-                        MessageBox.Show(tasky.Exception.ToString());
-                        Debug.WriteLine(tasky);
+                    MessageBox.Show(tasky.Exception.ToString());
+                    Debug.WriteLine(tasky);
 
-                        throw tasky.Exception;
-                    }
+                    throw tasky.Exception;
                 }, TaskContinuationOptions.OnlyOnFaulted);
                 tasks.Add(task);
             }
 
             // status display
-            long remaining_old = 0;
-            for (int level = taskschedulers.Count() - 1; level >= 0 && !cts.IsCancellationRequested; level--)
+            long remainingOld = 0;
+            for (int level = taskschedulers.Count() - 1; level >= 0 && !_cts.IsCancellationRequested; level--)
             {
-                var taskscheduler = taskschedulers[level];
+                LimitedConcurrencyLevelTaskScheduler taskscheduler = taskschedulers[level];
 #if DEBUG
                 Log("Entering task level {0} with {1} parallel threads.", level, taskscheduler.MaximumConcurrencyLevel);
 #endif
@@ -429,38 +431,40 @@ namespace UpdateToolGui
                 while (tasks.Any(task => !task.IsCanceled && !task.IsCompleted && !task.IsFaulted))
                 {
                     long remaining;
-                    lock (remaining_size_lock)
+                    lock (remainingSizeLock)
                     {
-                        remaining = remaining_size;
+                        remaining = remainingSize;
                     }
-                    long remaining_files_current;
-                    lock (remaining_files_lock)
+                    long remainingFilesCurrent;
+                    lock (remainingFilesLock)
                     {
-                        remaining_files_current = remaining_files;
+                        remainingFilesCurrent = remainingFiles;
                     }
-                    var byterate = (in_src_files_size - remaining) / sw.Elapsed.TotalSeconds;
-                    var realbyterate = 4 * (remaining_old - remaining);
-                    if (sw.Elapsed.TotalSeconds > 1)
-                        Progress("[{2} left] Analysis running, {0} in {3} files left ({1}/s)...", GetSize(remaining), GetSize(realbyterate), TimeSpan.FromSeconds(remaining / byterate).ToPrettyFormat(), remaining_files_current);
+                    var byterate = (inSrcFilesSize - remaining)/sw.Elapsed.TotalSeconds;
+                    var realbyterate = 4*(remainingOld - remaining);
+                    if (sw.Elapsed.TotalSeconds > 1 && byterate > 0)
+                        Progress("[{2} left] Analysis running, {0} in {3} files left ({1}/s)...", _getSize(remaining),
+                            _getSize(realbyterate), TimeSpan.FromSeconds(remaining/byterate).ToPrettyFormat(),
+                            remainingFilesCurrent);
                     else
                         Progress("Analysis running...");
-                    Progress((int)((in_src_files_size - remaining) / Math.Pow(10, power)));
-                    remaining_old = remaining;
+                    Progress((int) ((inSrcFilesSize - remaining)/Math.Pow(10, power)));
+                    remainingOld = remaining;
                     Thread.Sleep(250);
                 }
-                
+
 #if DEBUG
                 Log("Leaving task level {0}.", level);
 #endif
             }
-            
+
             // cancelled?
-            if (cts.IsCancellationRequested)
+            if (_cts.IsCancellationRequested)
             {
 #if DEBUG
                 Log("Job cancelled (managed).");
 #endif
-                cts.Token.ThrowIfCancellationRequested();
+                _cts.Token.ThrowIfCancellationRequested();
             }
 #if DEBUG
             else
@@ -468,7 +472,7 @@ namespace UpdateToolGui
 #endif
 
             // copy files to update folder if needed
-            if (in_copy)
+            if (inCopy)
             {
 #if DEBUG
                 Log("Update folder creation enabled, now processing copy queue...");
@@ -479,18 +483,20 @@ namespace UpdateToolGui
 
                 var i = 0;
 
-                foreach (FileInfo fi in files)
+                foreach (var fi in files)
                 {
-                    var file = fi.GetRelativePathFrom(in_src);
-                    var targetfile = new FileInfo(Path.Combine(in_copytarget, file));
+                    var file = fi.GetRelativePathFrom(inSrc);
+                    var targetfile = new FileInfo(Path.Combine(inCopytarget, file));
                     var sourcefile = fi;
 
                     // Check if directory exists, if not then create
+                    Debug.Assert(targetfile.Directory != null, "targetfile.Directory != null");
                     if (!targetfile.Directory.Exists)
                     {
 #if DEBUG
-                        Log("Creating directory: {0}", targetfile.GetRelativePathFrom(in_copytarget));
+                        Log("Creating directory: {0}", targetfile.GetRelativePathFrom(inCopytarget));
 #endif
+                        Debug.Assert(targetfile.Directory != null, "targetfile.Directory != null");
                         targetfile.Directory.Create();
                     }
 
@@ -503,109 +509,115 @@ namespace UpdateToolGui
                 }
 
 
-                if (in_createchanged && files.Any())
+                if (inCreatechanged && files.Any())
                 {
 #if DEBUG
                     Log("Changed files detected and changed files list creation enabled, writing changed_files.txt...");
 #endif
-                    using (var fs = File.Open(Path.Combine(new DirectoryInfo(in_copytarget).FullName, "changed_files.txt"), FileMode.Append))
+                    using (
+                        var fs =
+                            File.Open(Path.Combine(new DirectoryInfo(inCopytarget).FullName, "changed_files.txt"),
+                                FileMode.Append))
                     {
                         fs.Seek(0, SeekOrigin.End);
 
                         using (var tw = new StreamWriter(fs))
                         {
                             tw.WriteLine();
-                            tw.WriteLine("##################################################################################");
+                            tw.WriteLine(
+                                "##################################################################################");
                             tw.WriteLine("# These are all files which have been detected as changed or new during file");
                             tw.WriteLine("# comparison between these databases:");
                             tw.WriteLine("#");
-                            tw.WriteLine("#     Old database: {0}", in_old_db);
-                            tw.WriteLine("#     New database: {0}", in_db);
+                            tw.WriteLine("#     Old database: {0}", inOldDb);
+                            tw.WriteLine("#     New database: {0}", inDb);
                             tw.WriteLine("#");
-                            tw.WriteLine("# Date: {0}", DateTime.Now.ToString());
-                            tw.WriteLine("##################################################################################");
+                            tw.WriteLine("# Date: {0}", DateTime.Now);
+                            tw.WriteLine(
+                                "##################################################################################");
                             tw.WriteLine();
 
-                            files.Sort((fi1, fi2) => { return fi1.FullName.CompareTo(fi2.FullName); });
+                            files.Sort((fi1, fi2) => string.Compare(fi1.FullName, fi2.FullName, StringComparison.Ordinal));
                             foreach (var fi in files)
-                                tw.WriteLine(fi.GetRelativePathFrom(in_src));
+                                tw.WriteLine(fi.GetRelativePathFrom(inSrc));
                         }
                     }
                 }
 
                 // check for deleted files if needed
-                if (in_checkdeleted)
+                if (inCheckdeleted)
                 {
 #if DEBUG
                     Log("Deleted files check enabled, checking for deleted files...");
 #endif
 
-                    i = 0;
-                    Progress(0, old_db.Files.Count);
+                    Progress(0, oldDb.Files.Count);
 
                     var deletedFiles = new List<string>();
 
-                    foreach (var dfi in old_db.Files)
+                    foreach (var file in oldDb.Files
+                        .Select(dfi => Path.Combine(dfi.Folder, dfi.Name))
+                        .Where(file => !File.Exists(Path.Combine(new DirectoryInfo(inSrc).FullName + Path.DirectorySeparatorChar, file))))
                     {
-                        var file = Path.Combine(dfi.Folder, dfi.Name);
-                        bool exists = File.Exists(Path.Combine(new DirectoryInfo(in_src).FullName + Path.DirectorySeparatorChar, file));
-
-                        if (!exists)
-                        {
 #if DEBUG
-                            Log("Adding to deleted files list: {0}", file);
+                        Log("Adding to deleted files list: {0}", file);
 #endif
-                            deletedFiles.Add(file);
-                        }
+                        deletedFiles.Add(file);
                     }
 
-                    if (deletedFiles.Any() && in_checkdeleted)
+                    if (deletedFiles.Any())
                     {
 #if DEBUG
-                        Log("Deleted files detected and deleted files list creation enabled, writing deleted_files.txt...");
+                        Log(
+                            "Deleted files detected and deleted files list creation enabled, writing deleted_files.txt...");
 #endif
 
-                        using (var fs = File.Open(Path.Combine(new DirectoryInfo(in_copytarget).FullName, "deleted_files.txt"), FileMode.Append))
+                        using (
+                            FileStream fs =
+                                File.Open(Path.Combine(new DirectoryInfo(inCopytarget).FullName, "deleted_files.txt"),
+                                    FileMode.Append))
                         {
                             fs.Seek(0, SeekOrigin.End);
 
                             using (var tw = new StreamWriter(fs))
                             {
                                 tw.WriteLine();
-                                tw.WriteLine("##################################################################################");
-                                tw.WriteLine("# These are all files which have been detected as deleted during file comparison");
+                                tw.WriteLine(
+                                    "##################################################################################");
+                                tw.WriteLine(
+                                    "# These are all files which have been detected as deleted during file comparison");
                                 tw.WriteLine("# between these databases:");
                                 tw.WriteLine("#");
-                                tw.WriteLine("#     Old database: {0}", in_old_db);
-                                tw.WriteLine("#     New database: {0}", in_db);
+                                tw.WriteLine("#     Old database: {0}", inOldDb);
+                                tw.WriteLine("#     New database: {0}", inDb);
                                 tw.WriteLine("#");
-                                tw.WriteLine("# Date: {0}", DateTime.Now.ToString());
-                                tw.WriteLine("##################################################################################");
+                                tw.WriteLine("# Date: {0}", DateTime.Now);
+                                tw.WriteLine(
+                                    "##################################################################################");
                                 tw.WriteLine();
 
                                 deletedFiles.Sort();
-                                foreach (var file in deletedFiles)
+                                foreach (string file in deletedFiles)
                                     tw.WriteLine(file);
                             }
                         }
                     }
                 }
-
             }
 
             Progress(1, 1);
 #if DEBUG
             Log("Saving database...");
 #endif
-            File.Delete(in_db);
+            File.Delete(inDb);
 
-            using (var fs = File.CreateText(in_db))
+            using (StreamWriter fs = File.CreateText(inDb))
             {
-                if (in_compress)
+                if (inCompress)
                 {
                     fs.Write("DEFLATEC"); // header to identify deflate compression
                     fs.Flush();
-                    using (var fsc = new System.IO.Compression.DeflateStream(fs.BaseStream, System.IO.Compression.CompressionMode.Compress, true))
+                    using (var fsc = new DeflateStream(fs.BaseStream, CompressionMode.Compress, true))
                         db.Serialize(fsc);
                 }
                 else
@@ -616,13 +628,12 @@ namespace UpdateToolGui
 #if DEBUG
             Log("Job finishing...");
 #endif
-            return; // lol.
         }
 
         private void backgroundWorker1_RunWorkerCompleted(object sender, RunWorkerCompletedEventArgs e)
         {
             panel1.Enabled = true;
-            cts.Cancel();
+            _cts.Cancel();
 
             if (e.Error != null)
             {
@@ -661,13 +672,13 @@ namespace UpdateToolGui
         {
             btn_cancel.Visible = btn_cancel.Enabled = !(
                 btn_run.Visible = btn_run.Enabled
-                = ((Control)sender).Enabled
-            );
+                    = ((Control) sender).Enabled
+                );
         }
 
         private void btn_cancel_Click(object sender, EventArgs e)
         {
-            cts.Cancel();
+            _cts.Cancel();
             btn_cancel.Enabled = false;
         }
 
@@ -675,6 +686,5 @@ namespace UpdateToolGui
         {
             btn_cancel.PerformClick();
         }
-
     }
 }
